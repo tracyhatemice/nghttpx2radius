@@ -1,17 +1,20 @@
 # nghttpx2radius
 
-A tool to parse nghttpx access logs from systemd journald and send accounting information to a RADIUS server. This program aggregates traffic per user (extracted from client certificate subject names) and sends RADIUS accounting packets.
+A daemon that continuously monitors nghttpx access logs from systemd journald and sends real-time RADIUS accounting information. It tracks active sessions per user+IP combination and sends periodic interim updates.
 
 ## Features
 
-- Reads nghttpx access logs from systemd journald (no log files required)
-- Extracts usernames from client certificate subject names (supports UID and CN fields)
-- Converts IPv4-mapped IPv6 addresses to pure IPv4 format
-- Aggregates traffic per user per IP address
-- Sends RADIUS Accounting-Start and Accounting-Stop packets
-- Configurable time range for log analysis
-- Support for user exclusion patterns (regex)
-- Dry-run mode for testing
+- **Real-time monitoring**: Continuously follows journald logs for immediate session tracking
+- **Session management**: Maintains active sessions per user+IP combination
+- **Accurate session timing**: Calculates actual session duration (first activity to last activity)
+- **Interim updates**: Sends periodic accounting updates (configurable interval, default 15 minutes)
+- **Automatic session cleanup**: Closes sessions after inactivity timeout
+- **Graceful shutdown**: Properly closes all active sessions on daemon stop
+- **Username extraction**: Supports both UID and CN fields from client certificates
+- **IPv4-mapped IPv6 conversion**: Automatically converts addresses to pure IPv4 format
+- **User exclusion**: Regex pattern support for excluding specific users
+- **Syslog integration**: All logs sent to syslog/journald for monitoring
+- **Dry-run mode**: Test mode without sending to RADIUS server
 
 ## Requirements
 
@@ -55,24 +58,46 @@ cd nghttpx2radius
 go build -o nghttpx2radius
 ```
 
-## Usage
+## Quick Start
 
-### Basic Usage
+### Installation
 
 ```bash
-nghttpx2radius --radius-server 192.168.1.100 --radius-secret your_shared_secret
+# Build and install
+git clone https://github.com/tracyhatemice/nghttpx2radius.git
+cd nghttpx2radius
+go build -o nghttpx2radius
+sudo cp nghttpx2radius /usr/local/bin/
+
+# Install systemd service
+sudo cp nghttpx2radius.service /etc/systemd/system/
+sudo nano /etc/systemd/system/nghttpx2radius.service  # Edit configuration
+sudo systemctl daemon-reload
+sudo systemctl enable nghttpx2radius
+sudo systemctl start nghttpx2radius
 ```
 
-### Common Options
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed installation and configuration instructions.
+
+## Usage
+
+### As a Daemon (Recommended)
+
+The daemon runs continuously and monitors logs in real-time:
 
 ```bash
 nghttpx2radius \
-  --radius-server 192.168.1.100 \
-  --radius-secret my_secret \
-  --seek-time 60 \
-  --radius-nasid nghttpx \
-  --nghttpx-service nghttpx
+  -radius-server 192.168.1.100 \
+  -radius-secret your_shared_secret \
+  -interim-interval 15
 ```
+
+The daemon will:
+1. Monitor journald logs continuously
+2. Create accounting sessions for new user+IP combinations
+3. Send interim updates every 15 minutes
+4. Close sessions after 15 minutes of inactivity
+5. Handle graceful shutdown on SIGTERM/SIGINT
 
 ### Dry Run (Test Mode)
 
@@ -80,9 +105,9 @@ Test without sending to RADIUS server:
 
 ```bash
 nghttpx2radius \
-  --radius-server 192.168.1.100 \
-  --radius-secret my_secret \
-  --dry-run
+  -radius-server 192.168.1.100 \
+  -radius-secret my_secret \
+  -dry-run
 ```
 
 ### Exclude Specific Users
@@ -91,33 +116,47 @@ Skip users matching a regex pattern:
 
 ```bash
 nghttpx2radius \
-  --radius-server 192.168.1.100 \
-  --radius-secret my_secret \
-  --exclude-pattern "test|user1mous"
+  -radius-server 192.168.1.100 \
+  -radius-secret my_secret \
+  -exclude-pattern "test|anonymous"
 ```
 
 ## Command-Line Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--radius-server` | *(required)* | RADIUS server address |
-| `--radius-secret` | *(required)* | RADIUS shared secret |
-| `--seek-time` | `60` | Time to look back in logs, in minutes |
-| `--radius-acct-port` | `1813` | RADIUS accounting port |
-| `--radius-nasid` | `nghttpx` | RADIUS NAS Identifier |
-| `--nghttpx-service` | `nghttpx` | Systemd service name for nghttpx |
-| `--exclude-pattern` | *(empty)* | Regex pattern to exclude usernames |
-| `--dry-run` | `false` | Run locally without contacting RADIUS server |
-| `--version` | - | Print version and exit |
+| `-radius-server` | *(required)* | RADIUS server address |
+| `-radius-secret` | *(required)* | RADIUS shared secret |
+| `-interim-interval` | `15` | Interim update interval in minutes (minimum: 1) |
+| `-radius-acct-port` | `1813` | RADIUS accounting port |
+| `-radius-nasid` | `nghttpx` | RADIUS NAS Identifier |
+| `-nghttpx-service` | `nghttpx` | Systemd service name for nghttpx |
+| `-exclude-pattern` | *(empty)* | Regex pattern to exclude usernames |
+| `-dry-run` | `false` | Run without sending to RADIUS server |
+| `-version` | - | Print version and exit |
 
-## Running as Cron Job
+## Monitoring
 
-Add to crontab to run hourly:
+### Check Daemon Status
 
 ```bash
-# Run every hour at minute 5
-5 * * * * /usr/local/bin/nghttpx2radius --radius-server 192.168.1.100 --radius-secret your_secret >> /var/log/nghttpx2radius.log 2>&1
+# Service status
+sudo systemctl status nghttpx2radius
+
+# View logs
+sudo journalctl -u nghttpx2radius -f
+
+# View recent errors
+sudo journalctl -u nghttpx2radius -p err -n 50
 ```
+
+### Key Log Messages
+
+- `New session: <user> from <ip>` - Session created
+- `Sent Accounting-Start` - Start packet sent
+- `Interim update: <user> from <ip>` - Periodic update
+- `Session timeout: <user> from <ip>` - Session closed due to inactivity
+- `Closing all active sessions` - Graceful shutdown in progress
 
 ## Certificate Subject Name Processing
 
@@ -135,14 +174,55 @@ Addresses in IPv4-mapped IPv6 format are automatically converted:
 
 ## How It Works
 
-1. Queries systemd journald for nghttpx logs from the last N minutes (default: 60)
-2. Parses each log entry to extract:
-   - Client IP address
-   - Username from certificate subject
-   - HTTP status code
-   - Bytes transferred
-3. Aggregates traffic per user per IP address
-4. Sends RADIUS Accounting-Start and Accounting-Stop packets for each user/IP combination
+### Session Lifecycle
+
+1. **Monitoring**: Daemon continuously follows journald logs using `journalctl -f`
+
+2. **Session Creation**: When a new user+IP combination is detected:
+   - Parse log line to extract username, IP, and bytes
+   - Create in-memory session with unique session ID
+   - Send RADIUS Accounting-Start packet
+   - Initialize session timers (first seen, last seen, last update)
+
+3. **Session Updates**: For each new log line from existing session:
+   - Update last activity timestamp
+   - Accumulate byte counters
+   - Keep session alive
+
+4. **Interim Updates**: Every N minutes (default 15):
+   - Check all active sessions
+   - If session has activity and hasn't been updated recently:
+     - Calculate session time (now - first seen)
+     - Send RADIUS Interim-Update with current bytes and time
+     - Update last update timestamp
+
+5. **Session Timeout**: If no activity for N minutes:
+   - Calculate final session time (last seen - first seen)
+   - Send RADIUS Accounting-Stop packet
+   - Remove session from memory
+
+6. **Graceful Shutdown**: On SIGTERM/SIGINT:
+   - Stop log monitoring
+   - Send Accounting-Stop for all active sessions
+   - Exit cleanly
+
+### RADIUS Packets
+
+**Accounting-Start** (new session):
+- User-Name, Acct-Session-ID, NAS-Identifier
+- Calling-Station-ID (client IP), Called-Station-ID (local IP)
+- Acct-Status-Type = Start
+
+**Interim-Update** (periodic):
+- All Start attributes plus:
+- Acct-Output-Octets (total bytes transferred)
+- Acct-Session-Time (seconds since session start)
+- Acct-Status-Type = Interim-Update
+
+**Accounting-Stop** (session end):
+- All Interim attributes plus:
+- Acct-Terminate-Cause = User-Request
+- Acct-Status-Type = Stop
 
 ## Building Releases
 
@@ -182,6 +262,21 @@ journalctl -u nghttpx --since "1 hour ago" | grep CN:
 
 This project is a derivative of [squid2radius](https://github.com/tracyhatemice/squid2radius), modified to support nghttpx with journald.
 
+## Architecture Changes from v4.x
+
+Version 5.0.0 is a major architectural change from the cron-based v4.x:
+
+| Feature | v4.x (Batch) | v5.x (Daemon) |
+|---------|--------------|---------------|
+| Execution | Periodic (cron) | Continuous (daemon) |
+| Session tracking | Batch aggregation | Real-time per session |
+| Accounting packets | Start+Stop only | Start+Interim+Stop |
+| Session time | Estimated | Accurate (first-last) |
+| Memory usage | None (stateless) | Per-session state |
+| Restart impact | None | Sessions closed |
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for migration instructions.
+
 ## Version
 
-Current version: 4.0.0
+Current version: 5.0.0

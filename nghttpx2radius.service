@@ -1,0 +1,49 @@
+[Unit]
+Description=nghttpx RADIUS Accounting Daemon
+Documentation=https://github.com/tracyhatemice/nghttpx2radius
+After=network.target nghttpx.service
+Wants=nghttpx.service
+
+[Service]
+Type=simple
+User=nobody
+Group=nogroup
+
+# Path to the executable
+ExecStart=/usr/local/bin/nghttpx2radius \
+    -radius-server=YOUR_RADIUS_SERVER \
+    -radius-secret=YOUR_RADIUS_SECRET \
+    -radius-acct-port=1813 \
+    -radius-nasid=nghttpx \
+    -nghttpx-service=nghttpx \
+    -interim-interval=15
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/
+ReadWritePaths=/var/log
+
+# Capabilities needed to read journald logs
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Allow access to journald
+SupplementaryGroups=systemd-journal
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nghttpx2radius
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
