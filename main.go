@@ -411,6 +411,12 @@ func (sm *SessionManager) sendRadiusStart(session *Session) error {
 	rfc2865.CallingStationID_SetString(packet, session.IP)
 	rfc2865.CalledStationID_SetString(packet, session.CalledStationIP)
 
+	// Add Connect-Info with connection start timestamp (RFC 2869, Attribute 77)
+	connectInfoStart := fmt.Sprintf("CONNECT_START=%s", session.FirstSeen.Format(time.RFC3339))
+	if attr, err := radius.NewString(connectInfoStart); err == nil {
+		packet.Add(77, attr)
+	}
+
 	serverAddr := net.JoinHostPort(sm.config.RadiusServer, sm.config.RadiusAcctPort)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
