@@ -411,6 +411,11 @@ func (sm *SessionManager) sendRadiusStart(session *Session) error {
 	rfc2865.CallingStationID_SetString(packet, session.IP)
 	rfc2865.CalledStationID_SetString(packet, session.CalledStationIP)
 
+	// Add Connect-Info (RFC 2869, Attribute 77)
+	if attr, err := radius.NewString("HTTPS Proxy"); err == nil {
+		packet.Add(77, attr)
+	}
+
 	serverAddr := net.JoinHostPort(sm.config.RadiusServer, sm.config.RadiusAcctPort)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
