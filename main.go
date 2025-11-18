@@ -411,9 +411,8 @@ func (sm *SessionManager) sendRadiusStart(session *Session) error {
 	rfc2865.CallingStationID_SetString(packet, session.IP)
 	rfc2865.CalledStationID_SetString(packet, session.CalledStationIP)
 
-	// Add Connect-Info with HTTPS Proxy client information (RFC 2869, Attribute 77)
-	connectInfo := fmt.Sprintf("HTTPS Proxy: %s from %s at %s", session.Username, session.IP, session.FirstSeen.Format(time.RFC3339))
-	if attr, err := radius.NewString(connectInfo); err == nil {
+	// Add Connect-Info (RFC 2869, Attribute 77)
+	if attr, err := radius.NewString("HTTPS Proxy"); err == nil {
 		packet.Add(77, attr)
 	}
 
