@@ -501,21 +501,41 @@ func (sm *SessionManager) sendRadiusStop(session *Session) error {
 }
 
 // extractUsernameFromSubject extracts the username from the certificate subject.
-// Priority: UID field if present, otherwise CN field.
-// Example: "emailAddress=user1@home.arpa,CN=user1,OU=Users,O=Lake,L=Tualatin,ST=OR,C=US" -> "user1"
-// Example: "UID=user2,CN=user2" -> "user2"
+// Handles multiple formats:
+// - Simple username: "user1" -> "user1"
+// - Comma-separated DN: "UID=user1,CN=user1" -> "user1"
+// - Slash-separated DN: "/CN=user1/UID=user1" -> "user1"
+// - Full DN: "emailAddress=user1@home.arpa,CN=user1,OU=Users,O=Lake,L=Tualatin,ST=OR,C=US" -> "user1"
+// Priority: UID field if present, otherwise CN field, otherwise the whole subject if no DN fields found
 func extractUsernameFromSubject(subject string) string {
-	// Split by comma to get individual fields
-	fields := strings.Split(subject, ",")
+	// If subject doesn't contain '=' or '/', it's a simple username
+	if !strings.Contains(subject, "=") && !strings.Contains(subject, "/") {
+		return subject
+	}
 
 	var cn, uid string
 
-	for _, field := range fields {
-		field = strings.TrimSpace(field)
-		if strings.HasPrefix(field, "UID=") {
-			uid = strings.TrimPrefix(field, "UID=")
-		} else if strings.HasPrefix(field, "CN=") {
-			cn = strings.TrimPrefix(field, "CN=")
+	// Handle slash-separated DN format (e.g., "/CN=user1/UID=user1")
+	if strings.HasPrefix(subject, "/") {
+		fields := strings.Split(subject, "/")
+		for _, field := range fields {
+			field = strings.TrimSpace(field)
+			if strings.HasPrefix(field, "UID=") {
+				uid = strings.TrimPrefix(field, "UID=")
+			} else if strings.HasPrefix(field, "CN=") {
+				cn = strings.TrimPrefix(field, "CN=")
+			}
+		}
+	} else {
+		// Handle comma-separated DN format (e.g., "UID=user1,CN=user1")
+		fields := strings.Split(subject, ",")
+		for _, field := range fields {
+			field = strings.TrimSpace(field)
+			if strings.HasPrefix(field, "UID=") {
+				uid = strings.TrimPrefix(field, "UID=")
+			} else if strings.HasPrefix(field, "CN=") {
+				cn = strings.TrimPrefix(field, "CN=")
+			}
 		}
 	}
 
@@ -523,7 +543,12 @@ func extractUsernameFromSubject(subject string) string {
 	if uid != "" {
 		return uid
 	}
-	return cn
+	if cn != "" {
+		return cn
+	}
+
+	// If no UID or CN found, return the original subject
+	return subject
 }
 
 // convertIPv4MappedAddress converts IPv4-mapped IPv6 addresses to pure IPv4.
