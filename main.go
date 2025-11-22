@@ -30,6 +30,7 @@ type Config struct {
 	RadiusSecret     string
 	RadiusAcctPort   string
 	RadiusNASID      string
+	NASIPAddress     string
 	NghttpxService   string
 	ExcludePattern   string
 	InterimInterval  int  // minutes
@@ -122,6 +123,7 @@ func parseArgs() *Config {
 	flag.StringVar(&config.RadiusSecret, "radius-secret", "", "RADIUS shared secret (required)")
 	flag.StringVar(&config.RadiusAcctPort, "radius-acct-port", "1813", "RADIUS accounting port")
 	flag.StringVar(&config.RadiusNASID, "radius-nasid", "nghttpx", "RADIUS NAS Identifier")
+	flag.StringVar(&config.NASIPAddress, "nas-ip-address", "", "NAS IP Address sent to RADIUS server (optional)")
 	flag.StringVar(&config.NghttpxService, "nghttpx-service", "nghttpx", "systemd service name for nghttpx")
 	flag.StringVar(&config.ExcludePattern, "exclude-pattern", "", "do not send to server if username contains this regexp")
 	flag.IntVar(&config.InterimInterval, "interim-interval", 15, "interim update interval in minutes")
@@ -408,6 +410,11 @@ func (sm *SessionManager) sendRadiusStart(session *Session) error {
 	rfc2866.AcctSessionID_SetString(packet, session.SessionID)
 	rfc2866.AcctStatusType_Set(packet, rfc2866.AcctStatusType_Value_Start)
 	rfc2865.NASIdentifier_SetString(packet, sm.config.RadiusNASID)
+	if sm.config.NASIPAddress != "" {
+		if nasIP := net.ParseIP(sm.config.NASIPAddress); nasIP != nil {
+			rfc2865.NASIPAddress_Set(packet, nasIP)
+		}
+	}
 	rfc2865.CallingStationID_SetString(packet, session.IP)
 	rfc2865.CalledStationID_SetString(packet, session.CalledStationIP)
 
@@ -446,6 +453,11 @@ func (sm *SessionManager) sendRadiusInterim(session *Session) error {
 	rfc2866.AcctSessionID_SetString(packet, session.SessionID)
 	rfc2866.AcctStatusType_Set(packet, rfc2866.AcctStatusType_Value_InterimUpdate)
 	rfc2865.NASIdentifier_SetString(packet, sm.config.RadiusNASID)
+	if sm.config.NASIPAddress != "" {
+		if nasIP := net.ParseIP(sm.config.NASIPAddress); nasIP != nil {
+			rfc2865.NASIPAddress_Set(packet, nasIP)
+		}
+	}
 	rfc2865.CallingStationID_SetString(packet, session.IP)
 	rfc2865.CalledStationID_SetString(packet, session.CalledStationIP)
 	rfc2866.AcctOutputOctets_Set(packet, rfc2866.AcctOutputOctets(totalBytes))
@@ -481,6 +493,11 @@ func (sm *SessionManager) sendRadiusStop(session *Session) error {
 	rfc2866.AcctSessionID_SetString(packet, session.SessionID)
 	rfc2866.AcctStatusType_Set(packet, rfc2866.AcctStatusType_Value_Stop)
 	rfc2865.NASIdentifier_SetString(packet, sm.config.RadiusNASID)
+	if sm.config.NASIPAddress != "" {
+		if nasIP := net.ParseIP(sm.config.NASIPAddress); nasIP != nil {
+			rfc2865.NASIPAddress_Set(packet, nasIP)
+		}
+	}
 	rfc2865.CallingStationID_SetString(packet, session.IP)
 	rfc2865.CalledStationID_SetString(packet, session.CalledStationIP)
 	rfc2866.AcctOutputOctets_Set(packet, rfc2866.AcctOutputOctets(totalBytes))
