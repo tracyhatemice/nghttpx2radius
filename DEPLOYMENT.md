@@ -70,6 +70,7 @@ Update the following parameters in the `ExecStart` line:
 
 **Optional parameters:**
 
+- `-nas-ip-address`: NAS IP Address sent to RADIUS server
 - `-exclude-pattern`: Regex pattern to exclude usernames from accounting
 - `-dry-run`: Run without sending to RADIUS server (for testing)
 
@@ -101,6 +102,7 @@ sudo systemctl start nghttpx2radius
 | `-radius-secret` | (required) | RADIUS shared secret |
 | `-radius-acct-port` | 1813 | RADIUS accounting port |
 | `-radius-nasid` | nghttpx | RADIUS NAS Identifier |
+| `-nas-ip-address` | (none) | NAS IP Address sent to RADIUS server |
 | `-nghttpx-service` | nghttpx | systemd service name for nghttpx |
 | `-interim-interval` | 15 | Interim update interval in minutes (minimum: 1) |
 | `-exclude-pattern` | (none) | Regex pattern to exclude usernames |
@@ -137,6 +139,7 @@ sudo systemctl start nghttpx2radius
 - Acct-Session-ID (Unix timestamp)
 - Acct-Status-Type = Start
 - NAS-Identifier
+- NAS-IP-Address (if configured via `-nas-ip-address`)
 - Calling-Station-ID (client IP)
 - Called-Station-ID (local IP)
 

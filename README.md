@@ -130,6 +130,7 @@ nghttpx2radius \
 | `-interim-interval` | `15` | Interim update interval in minutes (minimum: 1) |
 | `-radius-acct-port` | `1813` | RADIUS accounting port |
 | `-radius-nasid` | `nghttpx` | RADIUS NAS Identifier |
+| `-nas-ip-address` | *(empty)* | NAS IP Address sent to RADIUS server (optional) |
 | `-nghttpx-service` | `nghttpx` | Systemd service name for nghttpx |
 | `-exclude-pattern` | *(empty)* | Regex pattern to exclude usernames |
 | `-dry-run` | `false` | Run without sending to RADIUS server |
@@ -210,6 +211,7 @@ Addresses in IPv4-mapped IPv6 format are automatically converted:
 
 **Accounting-Start** (new session):
 - User-Name, Acct-Session-ID, NAS-Identifier
+- NAS-IP-Address (if `-nas-ip-address` flag is set)
 - Calling-Station-ID (client IP), Called-Station-ID (local IP)
 - Acct-Status-Type = Start
 
