@@ -463,11 +463,16 @@ func (sm *SessionManager) sendRadiusInterim(session *Session) error {
 	rfc2866.AcctOutputOctets_Set(packet, rfc2866.AcctOutputOctets(totalBytes))
 	rfc2866.AcctSessionTime_Set(packet, rfc2866.AcctSessionTime(sessionTime))
 
+	// Add Connect-Info (RFC 2869, Attribute 77)
+	if attr, err := radius.NewString("HTTPS Proxy"); err == nil {
+		packet.Add(77, attr)
+	}
+
 	serverAddr := net.JoinHostPort(sm.config.RadiusServer, sm.config.RadiusAcctPort)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := radius.Exchange(ctx, packet, serverAddr)
+	_, err = radius.Exchange(ctx, packet, serverAddr)
 	if err != nil {
 		return fmt.Errorf("Interim-Update failed: %w", err)
 	}
@@ -504,11 +509,16 @@ func (sm *SessionManager) sendRadiusStop(session *Session) error {
 	rfc2866.AcctSessionTime_Set(packet, rfc2866.AcctSessionTime(sessionTime))
 	rfc2866.AcctTerminateCause_Set(packet, rfc2866.AcctTerminateCause_Value_UserRequest)
 
+	// Add Connect-Info (RFC 2869, Attribute 77)
+	if attr, err := radius.NewString("HTTPS Proxy"); err == nil {
+		packet.Add(77, attr)
+	}
+
 	serverAddr := net.JoinHostPort(sm.config.RadiusServer, sm.config.RadiusAcctPort)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := radius.Exchange(ctx, packet, serverAddr)
+	_, err = radius.Exchange(ctx, packet, serverAddr)
 	if err != nil {
 		return fmt.Errorf("Accounting-Stop failed: %w", err)
 	}
